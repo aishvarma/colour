@@ -19,10 +19,11 @@ import inspect
 import functools
 import numpy as np
 import warnings
+from contextlib import contextmanager
 from copy import deepcopy
 from six import string_types
 
-from colour.constants import INTEGER_THRESHOLD
+from colour.constants import INTEGER_THRESHOLD, DEFAULT_FLOAT_DTYPE
 
 __author__ = 'Colour Developers'
 __copyright__ = 'Copyright (C) 2013-2018 - Colour Developers'
@@ -35,7 +36,11 @@ __all__ = [
     'handle_numpy_errors', 'ignore_numpy_errors', 'raise_numpy_errors',
     'print_numpy_errors', 'warn_numpy_errors', 'ignore_python_warnings',
     'batch', 'is_openimageio_installed', 'is_pandas_installed', 'is_iterable',
-    'is_string', 'is_numeric', 'is_integer', 'filter_kwargs', 'first_item'
+    'is_string', 'is_numeric', 'is_integer', 'filter_kwargs', 'first_item',
+    'domain_range_scale', 'get_domain_range_scale', 'set_domain_range_scale',
+    'to_domain_1', 'to_domain_10', 'to_domain_100', 'to_domain_degrees',
+    'to_domain_int', 'from_range_1', 'from_range_100', 'from_range_degrees',
+    'from_range_int'
 ]
 
 
@@ -287,8 +292,8 @@ def is_numeric(a):
     False
     """
 
-    return isinstance(a, (int, float, complex, np.integer, np.floating,
-                          np.complex))
+    return isinstance(
+        a, (int, float, complex, np.integer, np.floating, np.complex))
 
 
 def is_integer(a):
@@ -392,3 +397,127 @@ def first_item(a):
     """
 
     return next(iter(a))
+
+
+_DOMAIN_RANGE_SCALE = 'reference'
+
+
+@contextmanager
+def domain_range_scale(scale):
+    current_scale = get_domain_range_scale()
+    try:
+        set_domain_range_scale(scale)
+        yield
+    finally:
+        set_domain_range_scale(current_scale)
+
+
+def get_domain_range_scale():
+    return _DOMAIN_RANGE_SCALE
+
+
+def set_domain_range_scale(scale='1'):
+    global _DOMAIN_RANGE_SCALE
+
+    scale = str(scale).lower()
+    valid = ('1', '100', 'reference')
+    assert scale in valid, 'Scale must be one of "{0}".'.format(valid)
+
+    _DOMAIN_RANGE_SCALE = scale
+
+
+def to_domain_1(a, scale_factor=100, dtype=DEFAULT_FLOAT_DTYPE):
+
+    a = np.asarray(a, dtype=dtype).copy()
+
+    if _DOMAIN_RANGE_SCALE == '100':
+        a /= scale_factor
+
+    return a
+
+
+def to_domain_10(a, scale_factor=10, dtype=DEFAULT_FLOAT_DTYPE):
+
+    a = np.asarray(a, dtype=dtype).copy()
+
+    if _DOMAIN_RANGE_SCALE == '1':
+        a *= scale_factor
+
+    if _DOMAIN_RANGE_SCALE == '100':
+        a /= scale_factor
+
+    return a
+
+
+def to_domain_100(a, scale_factor=100, dtype=DEFAULT_FLOAT_DTYPE):
+
+    a = np.asarray(a, dtype=dtype).copy()
+
+    if _DOMAIN_RANGE_SCALE == '1':
+        a *= scale_factor
+
+    return a
+
+
+def to_domain_degrees(a, scale_factor=360, dtype=DEFAULT_FLOAT_DTYPE):
+
+    a = np.asarray(a, dtype=dtype).copy()
+
+    if _DOMAIN_RANGE_SCALE == '1':
+        a *= scale_factor
+
+    if _DOMAIN_RANGE_SCALE == '100':
+        a *= scale_factor / 100
+
+    return a
+
+
+def to_domain_int(a, bit_depth=8, dtype=DEFAULT_FLOAT_DTYPE):
+
+    a = np.asarray(a, dtype=dtype).copy()
+
+    maximum_code_value = 2 ** bit_depth - 1
+    if _DOMAIN_RANGE_SCALE == '1':
+        a *= maximum_code_value
+
+    if _DOMAIN_RANGE_SCALE == '100':
+        a *= maximum_code_value / 100
+
+    return a
+
+
+def from_range_1(a, scale_factor=100):
+    if _DOMAIN_RANGE_SCALE == '100':
+        a *= scale_factor
+
+    return a
+
+
+def from_range_100(a, scale_factor=100):
+    if _DOMAIN_RANGE_SCALE == '1':
+        a /= scale_factor
+
+    return a
+
+
+def from_range_degrees(a, scale_factor=360):
+    if _DOMAIN_RANGE_SCALE == '1':
+        a /= scale_factor
+
+    if _DOMAIN_RANGE_SCALE == '100':
+        a /= scale_factor / 100
+
+    return a
+
+
+def from_range_int(a, bit_depth=8, dtype=DEFAULT_FLOAT_DTYPE):
+    maximum_code_value = 2 ** bit_depth - 1
+    if _DOMAIN_RANGE_SCALE == '1':
+        a = np.asarray(a).astype(dtype)
+        a /= maximum_code_value
+
+    if _DOMAIN_RANGE_SCALE == '100':
+        a = np.asarray(a).astype(dtype)
+        a /= maximum_code_value / 100
+
+    return a

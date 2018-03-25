@@ -26,7 +26,7 @@ from __future__ import absolute_import
 import numpy as np
 
 from colour.utilities import (CaseInsensitiveMapping, filter_kwargs,
-                              inspect_domain_1)
+                              get_domain_range_scale)
 
 from .dataset import *  # noqa
 from . import dataset
@@ -201,38 +201,40 @@ def chromatic_adaptation(XYZ, XYZ_w, XYZ_wr, method='Von Kries', **kwargs):
     array([ 0.2332526...,  0.2332455...,  0.7611593...])
     """
 
-    XYZ = np.asarray(inspect_domain_1(XYZ))
-    XYZ_w = np.asarray(inspect_domain_1(XYZ_w))
-    XYZ_wr = np.asarray(inspect_domain_1(XYZ_wr))
-
     function = CHROMATIC_ADAPTATION_METHODS[method]
 
-    # Callables with percentage domain.
-    # TODO: Handle scaling with metadata.
-    percentage_domain = (chromatic_adaptation_CIE1994,
-                         chromatic_adaptation_CMCCAT2000,
-                         chromatic_adaptation_Fairchild1990)
+    domain_range_reference = get_domain_range_scale() == 'reference'
+    domain_100 = (chromatic_adaptation_CIE1994,
+                  chromatic_adaptation_CMCCAT2000,
+                  chromatic_adaptation_Fairchild1990)
 
-    if function in percentage_domain:
-        XYZ = XYZ * 100
-        XYZ_w = XYZ_w * 100
-        XYZ_wr = XYZ_wr * 100
+    if function in domain_100 and domain_range_reference:
+        XYZ = np.asarray(XYZ) * 100
+        XYZ_w = np.asarray(XYZ_w) * 100
+        XYZ_wr = np.asarray(XYZ_wr) * 100
 
     kwargs.update({'XYZ_w': XYZ_w, 'XYZ_wr': XYZ_wr})
 
     if function is chromatic_adaptation_CIE1994:
         from colour import XYZ_to_xy
 
-        kwargs.update({
-            'xy_o1': XYZ_to_xy(XYZ_w / 100),
-            'xy_o2': XYZ_to_xy(XYZ_wr / 100)
-        })
+        if domain_range_reference:
+            kwargs.update({
+                'xy_o1': XYZ_to_xy(XYZ_w / 100),
+                'xy_o2': XYZ_to_xy(XYZ_wr / 100)
+            })
+        else:
+            kwargs.update({
+                'xy_o1': XYZ_to_xy(XYZ_w),
+                'xy_o2': XYZ_to_xy(XYZ_wr)
+            })
+
     elif function is chromatic_adaptation_Fairchild1990:
         kwargs.update({'XYZ_n': XYZ_w, 'XYZ_r': XYZ_wr})
 
     XYZ_c = function(XYZ, **filter_kwargs(function, **kwargs))
 
-    if function in percentage_domain:
+    if function in domain_100 and domain_range_reference:
         XYZ_c /= 100
 
     return XYZ_c
